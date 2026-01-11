@@ -30,6 +30,14 @@ if [[ -d "${HOME}/.local/bin" ]] && [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]];
     export PATH="${HOME}/.local/bin:${PATH}"
 fi
 
+# macOS: Tailscale CLI is inside the app bundle, not in PATH
+TAILSCALE_CMD="tailscale"
+if [[ "$OSTYPE" == "darwin"* ]] && ! command -v tailscale &>/dev/null; then
+    if [[ -x "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]]; then
+        TAILSCALE_CMD="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    fi
+fi
+
 echo -e "${BOLD}${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo -e "${BOLD}${BLUE}                    Claude Remote Status                     ${NC}"
 echo -e "${BOLD}${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -98,12 +106,12 @@ echo ""
 # Check Tailscale
 echo -e "${BOLD}${CYAN}Tailscale${NC}"
 echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
-if command -v tailscale &> /dev/null; then
+if command -v tailscale &>/dev/null || [[ -x "$TAILSCALE_CMD" ]]; then
     echo -e "  Status: ${GREEN}Installed${NC}"
 
     # Get Tailscale status
-    if tailscale status &>/dev/null; then
-        TS_STATUS=$(tailscale status --json 2>/dev/null)
+    if $TAILSCALE_CMD status &>/dev/null; then
+        TS_STATUS=$($TAILSCALE_CMD status --json 2>/dev/null)
         TS_IP=$(echo "$TS_STATUS" | grep -o '"TailscaleIPs":\[[^]]*\]' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
         TS_HOSTNAME=$(echo "$TS_STATUS" | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
 
@@ -113,7 +121,7 @@ if command -v tailscale &> /dev/null; then
             echo -e "  Hostname: ${TS_HOSTNAME}"
 
             # Check Serve status (not Funnel)
-            SERVE_STATUS=$(tailscale serve status 2>/dev/null || echo "")
+            SERVE_STATUS=$($TAILSCALE_CMD serve status 2>/dev/null || echo "")
             if echo "$SERVE_STATUS" | grep -q "7681"; then
                 echo -e "  Serve: ${GREEN}Active${NC} (Tailnet-only)"
                 echo -e "  Web URL: ${BOLD}https://${TS_HOSTNAME}:7681${NC}"
@@ -144,8 +152,9 @@ echo -e "  ${BOLD}SSH:${NC}"
 echo -e "    ssh ${USER}@${HOSTNAME} -t 'claude-session'"
 echo ""
 
-if command -v tailscale &> /dev/null && tailscale status &>/dev/null; then
-    TS_HOSTNAME=$(tailscale status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
+if command -v tailscale &>/dev/null || [[ -x "$TAILSCALE_CMD" ]]; then
+  if $TAILSCALE_CMD status &>/dev/null; then
+    TS_HOSTNAME=$($TAILSCALE_CMD status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
     if [ -n "$TS_HOSTNAME" ]; then
         echo -e "  ${BOLD}Web Browser (requires Tailscale on client):${NC}"
         echo -e "    https://${TS_HOSTNAME}:7681"
@@ -153,6 +162,7 @@ if command -v tailscale &> /dev/null && tailscale status &>/dev/null; then
         echo -e "    Password: cat ~/.config/claude-remote/web-credentials"
         echo ""
     fi
+  fi
 fi
 
 echo -e "${BOLD}${BLUE}═══════════════════════════════════════════════════════════${NC}"

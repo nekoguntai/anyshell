@@ -264,6 +264,19 @@ check_command() {
     command -v "$1" &> /dev/null
 }
 
+# macOS: Tailscale CLI is inside the app bundle, not in PATH
+TAILSCALE_CMD="tailscale"
+if [[ "$OSTYPE" == "darwin"* ]] && ! command -v tailscale &>/dev/null; then
+    if [[ -x "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]]; then
+        TAILSCALE_CMD="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    fi
+fi
+
+# Check if Tailscale is available (handles macOS app bundle location)
+check_tailscale() {
+    command -v tailscale &>/dev/null || [[ -x "$TAILSCALE_CMD" ]]
+}
+
 install_homebrew() {
     print_info "Installing Homebrew..."
     echo ""
@@ -736,7 +749,7 @@ install_tailscale() {
         curl -fsSL https://tailscale.com/install.sh | sh
     fi
 
-    if check_command tailscale; then
+    if check_tailscale; then
         print_success "Tailscale installed"
         return 0
     else
@@ -749,7 +762,7 @@ setup_tailscale() {
     print_step "Setting up Tailscale"
 
     # Check if Tailscale is installed
-    if ! check_command tailscale; then
+    if ! check_tailscale; then
         print_warning "Tailscale is not installed"
         print_info "Tailscale provides secure remote access to your machine"
         echo ""
@@ -777,7 +790,7 @@ setup_tailscale() {
     fi
 
     # Check if Tailscale is connected
-    if ! tailscale status &>/dev/null; then
+    if ! $TAILSCALE_CMD status &>/dev/null; then
         print_warning "Tailscale is installed but not connected"
         echo ""
 
@@ -802,7 +815,7 @@ setup_tailscale() {
             read -r
 
             # Check if now connected
-            if tailscale status &>/dev/null; then
+            if $TAILSCALE_CMD status &>/dev/null; then
                 print_success "Tailscale connected"
             else
                 print_warning "Tailscale still not connected"
@@ -846,18 +859,18 @@ setup_tailscale() {
     fi
 
     if $DRY_RUN; then
-        print_dry_run "tailscale serve https:7681 / http://127.0.0.1:7681"
+        print_dry_run "$TAILSCALE_CMD serve https:7681 / http://127.0.0.1:7681"
         return
     fi
 
     print_info "Configuring Tailscale Serve for web terminal..."
 
     # Enable HTTPS serve for Tailnet-only access (no Funnel = not public)
-    if tailscale serve https:7681 / http://127.0.0.1:7681 2>/dev/null; then
+    if $TAILSCALE_CMD serve https:7681 / http://127.0.0.1:7681 2>/dev/null; then
         print_success "Tailscale Serve enabled (Tailnet-only)"
 
         # Get the serve URL
-        TS_HOSTNAME=$(tailscale status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
+        TS_HOSTNAME=$($TAILSCALE_CMD status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
         if [[ -n "$TS_HOSTNAME" ]]; then
             print_success "Web terminal: https://${TS_HOSTNAME}:7681"
         fi
@@ -1079,8 +1092,8 @@ print_completion() {
     echo -e "     ${YELLOW}ssh $(whoami)@$(hostname) -t 'claude-session'${NC}"
     echo ""
 
-    if ! $SKIP_TTYD && check_command tailscale && tailscale status &>/dev/null; then
-        TS_HOSTNAME=$(tailscale status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
+    if ! $SKIP_TTYD && check_tailscale && $TAILSCALE_CMD status &>/dev/null; then
+        TS_HOSTNAME=$($TAILSCALE_CMD status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
         if [[ -n "$TS_HOSTNAME" ]]; then
             echo -e "  ${CYAN}4. Connect via web browser (requires Tailscale):${NC}"
             echo -e "     ${YELLOW}https://${TS_HOSTNAME}:7681${NC}"
