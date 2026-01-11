@@ -130,9 +130,23 @@ if command -v tailscale &>/dev/null || [[ -x "$TAILSCALE_CMD" ]]; then
             fi
         else
             echo -e "  Connected: ${RED}No${NC}"
+            echo ""
+            echo -e "  ${YELLOW}To connect:${NC}"
+            echo -e "    1. Click Tailscale icon in menu bar"
+            echo -e "    2. Click 'Log in' or 'Connect'"
+            echo -e "    3. Complete auth in browser"
         fi
     else
         echo -e "  Connected: ${RED}No${NC}"
+        echo ""
+        echo -e "  ${YELLOW}To connect:${NC}"
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo -e "    1. Click Tailscale icon in menu bar"
+            echo -e "    2. Click 'Log in' or 'Connect'"
+            echo -e "    3. Complete auth in browser"
+        else
+            echo -e "    Run: sudo tailscale up"
+        fi
     fi
 else
     echo -e "  Status: ${YELLOW}Not installed${NC}"
