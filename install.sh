@@ -996,6 +996,9 @@ configure_boot_persistence() {
 
         if $DRY_RUN; then
             print_dry_run "macOS: Services already configured for login startup"
+            if [[ -d "/Applications/Tailscale.app" ]]; then
+                print_dry_run "Add Tailscale to login items (osascript)"
+            fi
             return
         fi
 
@@ -1008,6 +1011,24 @@ configure_boot_persistence() {
         print_warning "CURRENT BEHAVIOR: Services start when you log in to your Mac"
         print_info "This means after a reboot, you must log in (locally or via SSH)"
         print_info "before the web terminal becomes available."
+        echo ""
+
+        # Add Tailscale to login items so it starts at boot
+        if [[ -d "/Applications/Tailscale.app" ]]; then
+            # Check if Tailscale is already in login items
+            if ! osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "Tailscale"; then
+                print_info "Adding Tailscale to login items..."
+                if osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Tailscale.app", hidden:false}' &>/dev/null; then
+                    print_success "Tailscale added to login items (will start at login)"
+                else
+                    print_warning "Could not add Tailscale to login items"
+                    print_info "Add manually: System Settings > General > Login Items > Add Tailscale"
+                fi
+            else
+                print_success "Tailscale already in login items"
+            fi
+        fi
+
         echo ""
         print_info "FOR HEADLESS/REMOTE MAC SETUP:"
         print_info "  Option 1: Enable 'Automatic Login' in System Settings > Users & Groups"
