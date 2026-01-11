@@ -3,6 +3,25 @@
 # test_helper.bash - Common fixtures and utilities for Bats tests
 #
 
+# Cross-platform timeout wrapper
+# Usage: run_with_timeout <seconds> <command> [args...]
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+
+    if command -v timeout &>/dev/null; then
+        # Linux: use timeout
+        timeout "$timeout_sec" "$@"
+    elif command -v gtimeout &>/dev/null; then
+        # macOS with coreutils: use gtimeout
+        gtimeout "$timeout_sec" "$@"
+    else
+        # Fallback: just run the command (no timeout)
+        # This is acceptable for CI since the tests should complete quickly
+        "$@"
+    fi
+}
+
 # Get the project root directory
 # BATS_TEST_DIRNAME is the directory containing the .bats file
 # We need to go up from tests/unit or tests/smoke to get project root

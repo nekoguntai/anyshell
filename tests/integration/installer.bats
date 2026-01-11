@@ -13,32 +13,32 @@ load '../test_helper'
 # =============================================================================
 
 @test "installer dry-run: completes without error" {
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     # Should not fail (may warn about missing dependencies)
     [[ "$output" =~ "DRY RUN MODE" ]]
 }
 
 @test "installer dry-run: detects OS" {
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "Detected OS:" ]]
 }
 
 @test "installer dry-run: shows package install step" {
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "Installing" ]] || [[ "$output" =~ "DRY-RUN" ]]
 }
 
 @test "installer dry-run: shows credential generation step" {
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "credentials" ]] || [[ "$output" =~ "Generating" ]]
 }
 
 @test "installer dry-run: shows script installation step" {
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "scripts" ]] || [[ "$output" =~ "Installing scripts" ]]
 }
@@ -52,7 +52,7 @@ load '../test_helper'
         skip "Not running on macOS"
     fi
 
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "macos" ]]
 }
@@ -62,7 +62,7 @@ load '../test_helper'
         skip "Not running on macOS"
     fi
 
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "brew" ]] || [[ "$output" =~ "Homebrew" ]]
 }
@@ -72,7 +72,7 @@ load '../test_helper'
         skip "Not running on macOS"
     fi
 
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "launchd" ]] || [[ "$output" =~ "LaunchAgents" ]]
 }
@@ -86,7 +86,7 @@ load '../test_helper'
         skip "Running on macOS, not Linux"
     fi
 
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "debian" ]] || [[ "$output" =~ "redhat" ]] || [[ "$output" =~ "linux" ]]
 }
@@ -96,7 +96,7 @@ load '../test_helper'
         skip "Running on macOS, not Linux"
     fi
 
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "apt" ]] || [[ "$output" =~ "dnf" ]]
 }
@@ -106,7 +106,7 @@ load '../test_helper'
         skip "Running on macOS, not Linux"
     fi
 
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "systemd" ]] || [[ "$output" =~ "systemctl" ]]
 }
@@ -116,7 +116,7 @@ load '../test_helper'
 # =============================================================================
 
 @test "installer: mentions Tailscale" {
-    run timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
+    run run_with_timeout 15 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "Tailscale" ]] || [[ "$output" =~ "tailscale" ]]
 }

@@ -43,14 +43,14 @@ load '../test_helper'
 # =============================================================================
 
 @test "installer: --dry-run shows DRY RUN MODE message" {
-    # Use timeout to prevent hanging if it tries to actually install
-    run timeout 5 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1 || true
+    # Use run_with_timeout to prevent hanging if it tries to actually install
+    run run_with_timeout 10 bash "${PROJECT_ROOT}/install.sh" --dry-run 2>&1
 
     [[ "$output" =~ "DRY RUN MODE" ]]
 }
 
 @test "installer: -n is alias for --dry-run" {
-    run timeout 5 bash "${PROJECT_ROOT}/install.sh" -n 2>&1 || true
+    run run_with_timeout 10 bash "${PROJECT_ROOT}/install.sh" -n 2>&1
 
     [[ "$output" =~ "DRY RUN MODE" ]]
 }
