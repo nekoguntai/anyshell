@@ -4,7 +4,15 @@
 #
 
 # Get the project root directory
-PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_DIRNAME}")" && pwd)"
+# BATS_TEST_DIRNAME is the directory containing the .bats file
+# We need to go up from tests/unit or tests/smoke to get project root
+if [[ -n "${BATS_TEST_DIRNAME:-}" ]]; then
+    # Go up two levels from tests/unit/ or tests/smoke/
+    PROJECT_ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
+else
+    # Fallback for manual testing
+    PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
 export PROJECT_ROOT
 export SCRIPTS_DIR="${PROJECT_ROOT}/scripts"
 

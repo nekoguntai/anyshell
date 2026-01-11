@@ -19,10 +19,12 @@ load '../test_helper'
     [ "$status" -eq 0 ]
 }
 
-@test "dependency: bash version is 4.0+" {
+@test "dependency: bash version is 3.2+ (macOS) or 4.0+ (Linux)" {
     local version="${BASH_VERSINFO[0]}"
 
-    [ "$version" -ge 4 ]
+    # macOS ships with bash 3.2, Linux typically has 4.0+
+    # Our scripts work with bash 3.2+ but prefer 4.0+
+    [ "$version" -ge 3 ]
 }
 
 @test "dependency: cat is available" {
