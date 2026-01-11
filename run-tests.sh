@@ -69,7 +69,8 @@ install_bats() {
 
     # Manual install
     echo "Installing from source..."
-    local tmp_dir=$(mktemp -d)
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
     git clone --depth 1 https://github.com/bats-core/bats-core.git "$tmp_dir/bats-core"
     cd "$tmp_dir/bats-core"
 

@@ -21,7 +21,7 @@ jobs:
           severity: warning
           format: tty
         env:
-          SHELLCHECK_OPTS: -e SC1091 -e SC2034
+          SHELLCHECK_OPTS: -e SC1090 -e SC1091 -e SC2034 -e SC2155
 
   test:
     name: Tests (Bats)

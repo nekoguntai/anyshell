@@ -4,12 +4,14 @@
 #
 
 # Get the project root directory
-export PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_DIRNAME}")" && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BATS_TEST_DIRNAME}")" && pwd)"
+export PROJECT_ROOT
 export SCRIPTS_DIR="${PROJECT_ROOT}/scripts"
 
 # Create a temporary directory for each test
 setup() {
-    export TEST_TEMP_DIR="$(mktemp -d)"
+    TEST_TEMP_DIR="$(mktemp -d)"
+    export TEST_TEMP_DIR
     export HOME="${TEST_TEMP_DIR}/home"
     mkdir -p "$HOME"
     mkdir -p "${HOME}/.config/claude-remote"
@@ -97,6 +99,7 @@ load_function() {
         tmux() { :; }
 
         # Source the script
+        # shellcheck source=/dev/null
         source "$script" 2>/dev/null || true
 
         # Print the function definition

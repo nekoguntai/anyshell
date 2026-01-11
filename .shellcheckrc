@@ -8,9 +8,10 @@ shell=bash
 severity=warning
 
 # Excluded checks:
+# SC1090 - Can't follow non-constant source (dynamic sourcing in tests)
 # SC1091 - Not following sourced files (we have custom paths)
 # SC2034 - Unused variables (some are used in subshells/sourced scripts)
-disable=SC1091,SC2034
+disable=SC1090,SC1091,SC2034
 
 # Enable all other checks including:
 # SC2086 - Quote to prevent globbing and word splitting
