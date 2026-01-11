@@ -335,6 +335,9 @@ install_packages_macos() {
         fi
 
         # Ask user if they want to install Homebrew
+        print_info "Note: The Homebrew installer will ask for your Mac password"
+        print_info "and may display additional prompts."
+        echo ""
         echo -e "${BOLD}Would you like to install Homebrew now? [Y/n]${NC} "
         read -r response
         response=${response:-Y}  # Default to Y if empty
@@ -1135,6 +1138,10 @@ print_completion() {
         echo "  • HTTPS encryption via Tailscale"
         echo "  • Max 2 concurrent web connections allowed"
         echo "  • Enable 2FA on your Tailscale account for extra security"
+        echo ""
+        echo -e "${BOLD}${YELLOW}Browser Note:${NC}"
+        echo "  • Safari has a known bug with ttyd authentication"
+        echo "  • Use Chrome or Firefox for the web terminal"
         echo ""
     else
         echo -e "${BOLD}${YELLOW}Note: Web terminal not available${NC}"
