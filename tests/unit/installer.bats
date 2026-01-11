@@ -293,8 +293,8 @@ arch_to_ttyd_arch() {
     [ -f "${PROJECT_ROOT}/scripts/anyshell" ]
     [ -f "${PROJECT_ROOT}/scripts/web-terminal" ]
     [ -f "${PROJECT_ROOT}/scripts/ttyd-wrapper" ]
-    [ -f "${PROJECT_ROOT}/scripts/status" ]
-    [ -f "${PROJECT_ROOT}/scripts/maintenance" ]
+    [ -f "${PROJECT_ROOT}/scripts/anyshell-status" ]
+    [ -f "${PROJECT_ROOT}/scripts/anyshell-maintenance" ]
 }
 
 @test "installer: all required configs exist" {
