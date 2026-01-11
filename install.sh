@@ -653,30 +653,109 @@ install_service_macos() {
     print_info "Maintenance: runs weekly (Sundays 3:00 AM)"
 }
 
-setup_tailscale() {
-    print_step "Configuring Tailscale"
+install_tailscale() {
+    print_info "Installing Tailscale..."
 
-    if ! check_command tailscale; then
-        print_warning "Tailscale not installed"
-        print_info "Install Tailscale for secure remote access:"
+    if $DRY_RUN; then
         if [[ "$OS" == "macos" ]]; then
-            echo "        brew install --cask tailscale"
+            print_dry_run "brew install --cask tailscale"
         else
-            echo ""
-            echo "        # Download and verify before running:"
-            echo "        curl -fsSL https://tailscale.com/install.sh -o /tmp/tailscale-install.sh"
-            echo "        less /tmp/tailscale-install.sh  # Review the script"
-            echo "        sh /tmp/tailscale-install.sh"
+            print_dry_run "curl -fsSL https://tailscale.com/install.sh | sh"
         fi
-        print_info "After installing, run: sudo tailscale up"
-        print_info "Then re-run this installer to configure web terminal access"
-        return
+        return 0
+    fi
+
+    if [[ "$OS" == "macos" ]]; then
+        if check_command brew; then
+            brew install --cask tailscale
+        else
+            print_error "Homebrew required to install Tailscale on macOS"
+            print_info "Install manually from: https://tailscale.com/download/mac"
+            return 1
+        fi
+    else
+        # Linux - use official install script
+        curl -fsSL https://tailscale.com/install.sh | sh
+    fi
+
+    if check_command tailscale; then
+        print_success "Tailscale installed"
+        return 0
+    else
+        print_error "Tailscale installation may have failed"
+        return 1
+    fi
+}
+
+setup_tailscale() {
+    print_step "Setting up Tailscale"
+
+    # Check if Tailscale is installed
+    if ! check_command tailscale; then
+        print_warning "Tailscale is not installed"
+        print_info "Tailscale provides secure remote access to your machine"
+        echo ""
+
+        if $DRY_RUN; then
+            print_dry_run "Would prompt to install Tailscale"
+            return
+        fi
+
+        echo -e "${BOLD}Would you like to install Tailscale now? [Y/n]${NC} "
+        read -r response
+        response=${response:-Y}
+
+        if [[ "$response" =~ ^[Yy]$ ]] || [[ -z "$response" ]]; then
+            install_tailscale || {
+                print_warning "Tailscale installation failed"
+                print_info "You can install it later from: https://tailscale.com/download"
+                return
+            }
+        else
+            print_info "Skipping Tailscale installation"
+            print_info "Install later from: https://tailscale.com/download"
+            return
+        fi
     fi
 
     # Check if Tailscale is connected
     if ! tailscale status &>/dev/null; then
-        print_warning "Tailscale is not connected"
-        print_info "Run: sudo tailscale up"
+        print_warning "Tailscale is installed but not connected"
+        echo ""
+
+        if $DRY_RUN; then
+            print_dry_run "sudo tailscale up"
+            return
+        fi
+
+        echo -e "${BOLD}Would you like to connect to Tailscale now? [Y/n]${NC} "
+        read -r response
+        response=${response:-Y}
+
+        if [[ "$response" =~ ^[Yy]$ ]] || [[ -z "$response" ]]; then
+            print_info "Starting Tailscale authentication..."
+            print_info "A browser window will open for you to log in"
+            echo ""
+
+            if sudo tailscale up; then
+                print_success "Tailscale connected"
+            else
+                print_warning "Tailscale connection failed"
+                print_info "Run manually later: sudo tailscale up"
+                return
+            fi
+        else
+            print_info "Skipping Tailscale connection"
+            print_info "Connect later with: sudo tailscale up"
+            return
+        fi
+    fi
+
+    print_success "Tailscale is connected"
+
+    # Only configure serve if ttyd is available
+    if $SKIP_TTYD; then
+        print_info "Skipping Tailscale Serve (ttyd not available)"
         return
     fi
 
@@ -685,7 +764,7 @@ setup_tailscale() {
         return
     fi
 
-    print_info "Configuring Tailscale Serve (Tailnet-only access)..."
+    print_info "Configuring Tailscale Serve for web terminal..."
 
     # Enable HTTPS serve for Tailnet-only access (no Funnel = not public)
     if tailscale serve https:7681 / http://127.0.0.1:7681 2>/dev/null; then
@@ -694,12 +773,170 @@ setup_tailscale() {
         # Get the serve URL
         TS_HOSTNAME=$(tailscale status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
         if [[ -n "$TS_HOSTNAME" ]]; then
-            print_success "Web terminal available at: ${BOLD}https://${TS_HOSTNAME}:7681${NC}"
-            print_info "Access requires Tailscale - install on your devices"
+            print_success "Web terminal: https://${TS_HOSTNAME}:7681"
         fi
     else
         print_warning "Could not configure Tailscale Serve automatically"
         print_info "Run manually: tailscale serve https:7681 / http://127.0.0.1:7681"
+    fi
+}
+
+configure_firewall() {
+    print_step "Configuring firewall for mosh"
+
+    # Mosh uses UDP ports 60000-61000
+    local MOSH_PORTS="60000:61000/udp"
+
+    if [[ "$OS" == "macos" ]]; then
+        # macOS firewall typically doesn't block mosh by default
+        # The Application Firewall handles this at the app level
+        print_info "macOS firewall typically allows mosh connections"
+        print_info "If prompted, allow 'mosh-server' when connecting"
+
+        if $DRY_RUN; then
+            print_dry_run "macOS: No firewall changes needed"
+            return
+        fi
+
+        # Check if firewall is enabled
+        if /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate 2>/dev/null | grep -q "enabled"; then
+            print_info "Application Firewall is enabled"
+            print_info "mosh-server will be allowed automatically when first used"
+        fi
+        return
+    fi
+
+    # Linux firewall configuration
+    if $DRY_RUN; then
+        if check_command ufw; then
+            print_dry_run "sudo ufw allow 60000:61000/udp comment 'mosh'"
+        elif check_command firewall-cmd; then
+            print_dry_run "sudo firewall-cmd --permanent --add-port=60000-61000/udp"
+            print_dry_run "sudo firewall-cmd --reload"
+        else
+            print_dry_run "No firewall detected - skipping"
+        fi
+        return
+    fi
+
+    # Check for UFW (Ubuntu/Debian)
+    if check_command ufw; then
+        if sudo ufw status 2>/dev/null | grep -q "Status: active"; then
+            print_info "UFW firewall detected, opening mosh ports..."
+
+            echo -e "${BOLD}Allow mosh through firewall (UDP 60000-61000)? [Y/n]${NC} "
+            read -r response
+            response=${response:-Y}
+
+            if [[ "$response" =~ ^[Yy]$ ]] || [[ -z "$response" ]]; then
+                if sudo ufw allow 60000:61000/udp comment 'mosh'; then
+                    print_success "Firewall configured for mosh"
+                else
+                    print_warning "Failed to configure UFW"
+                    print_info "Run manually: sudo ufw allow 60000:61000/udp"
+                fi
+            else
+                print_info "Skipping firewall configuration"
+                print_info "Run manually if needed: sudo ufw allow 60000:61000/udp"
+            fi
+        else
+            print_info "UFW is installed but not active"
+        fi
+        return
+    fi
+
+    # Check for firewalld (Fedora/RHEL)
+    if check_command firewall-cmd; then
+        if sudo firewall-cmd --state 2>/dev/null | grep -q "running"; then
+            print_info "firewalld detected, opening mosh ports..."
+
+            echo -e "${BOLD}Allow mosh through firewall (UDP 60000-61000)? [Y/n]${NC} "
+            read -r response
+            response=${response:-Y}
+
+            if [[ "$response" =~ ^[Yy]$ ]] || [[ -z "$response" ]]; then
+                if sudo firewall-cmd --permanent --add-port=60000-61000/udp && \
+                   sudo firewall-cmd --reload; then
+                    print_success "Firewall configured for mosh"
+                else
+                    print_warning "Failed to configure firewalld"
+                    print_info "Run manually: sudo firewall-cmd --permanent --add-port=60000-61000/udp"
+                fi
+            else
+                print_info "Skipping firewall configuration"
+            fi
+        else
+            print_info "firewalld is installed but not running"
+        fi
+        return
+    fi
+
+    # Check for iptables
+    if check_command iptables; then
+        print_info "iptables detected"
+        print_info "To allow mosh, add this rule:"
+        echo "        sudo iptables -A INPUT -p udp --dport 60000:61000 -j ACCEPT"
+        return
+    fi
+
+    print_info "No firewall detected - no configuration needed"
+}
+
+configure_boot_persistence() {
+    print_step "Configuring services to survive reboots"
+
+    if [[ "$OS" == "macos" ]]; then
+        # macOS: LaunchAgents start at user login by default
+        print_info "macOS LaunchAgents are configured to start at login"
+
+        if $DRY_RUN; then
+            print_dry_run "macOS: Services already configured for login startup"
+            return
+        fi
+
+        # Verify services are set to load at login
+        if [[ -f "${HOME}/Library/LaunchAgents/com.claude.web.plist" ]]; then
+            print_success "Web terminal service will start at login"
+        fi
+
+        echo ""
+        print_info "For services to start before login (at boot):"
+        print_info "  Move plist to /Library/LaunchDaemons (requires admin)"
+        print_info "  Current setup starts services when you log in"
+
+        return
+    fi
+
+    # Linux: Enable systemd user lingering
+    print_info "Enabling systemd lingering for user services..."
+
+    if $DRY_RUN; then
+        print_dry_run "sudo loginctl enable-linger $(whoami)"
+        return
+    fi
+
+    echo ""
+    print_info "By default, user services only run when you're logged in."
+    print_info "Enabling 'lingering' allows services to start at boot"
+    print_info "and continue running even when you log out."
+    echo ""
+
+    echo -e "${BOLD}Enable services to start at boot and survive logout? [Y/n]${NC} "
+    read -r response
+    response=${response:-Y}
+
+    if [[ "$response" =~ ^[Yy]$ ]] || [[ -z "$response" ]]; then
+        if sudo loginctl enable-linger "$(whoami)"; then
+            print_success "Lingering enabled - services will survive reboots"
+            print_info "Services start at boot, not just at login"
+        else
+            print_warning "Failed to enable lingering"
+            print_info "Run manually: sudo loginctl enable-linger $(whoami)"
+        fi
+    else
+        print_info "Skipping lingering configuration"
+        print_info "Services will only run while you're logged in"
+        print_info "Enable later: sudo loginctl enable-linger $(whoami)"
     fi
 }
 
@@ -837,9 +1074,15 @@ main() {
         print_info "Web terminal can be enabled later by installing ttyd"
     fi
 
-    # Setup Tailscale for web terminal (only if ttyd is available)
+    # Configure firewall for mosh
+    configure_firewall
+
+    # Setup Tailscale (useful for both mosh and web terminal)
+    setup_tailscale
+
+    # Configure services to survive reboots
     if ! $SKIP_TTYD; then
-        setup_tailscale
+        configure_boot_persistence
     fi
 
     # Save version file
