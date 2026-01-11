@@ -112,8 +112,15 @@ if command -v tailscale &>/dev/null || [[ -x "$TAILSCALE_CMD" ]]; then
     # Get Tailscale status
     if $TAILSCALE_CMD status &>/dev/null; then
         TS_STATUS=$($TAILSCALE_CMD status --json 2>/dev/null)
-        TS_IP=$(echo "$TS_STATUS" | grep -o '"TailscaleIPs":\[[^]]*\]' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-        TS_HOSTNAME=$(echo "$TS_STATUS" | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
+        # Use jq if available, fallback to grep
+        if command -v jq &>/dev/null; then
+            TS_IP=$(echo "$TS_STATUS" | jq -r '.TailscaleIPs[0] // empty' 2>/dev/null)
+            TS_HOSTNAME=$(echo "$TS_STATUS" | jq -r '.Self.DNSName // empty' 2>/dev/null | sed 's/\.$//')
+        else
+            # Fallback: compact JSON and grep
+            TS_IP=$(echo "$TS_STATUS" | tr -d '\n ' | grep -oE '"TailscaleIPs":\["[0-9.]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            TS_HOSTNAME=$(echo "$TS_STATUS" | tr -d '\n ' | grep -oE '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
+        fi
 
         if [ -n "$TS_IP" ]; then
             echo -e "  Connected: ${GREEN}Yes${NC}"
@@ -168,7 +175,11 @@ echo ""
 
 if command -v tailscale &>/dev/null || [[ -x "$TAILSCALE_CMD" ]]; then
   if $TAILSCALE_CMD status &>/dev/null; then
-    TS_HOSTNAME=$($TAILSCALE_CMD status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
+    if command -v jq &>/dev/null; then
+        TS_HOSTNAME=$($TAILSCALE_CMD status --json 2>/dev/null | jq -r '.Self.DNSName // empty' | sed 's/\.$//')
+    else
+        TS_HOSTNAME=$($TAILSCALE_CMD status --json 2>/dev/null | tr -d '\n ' | grep -oE '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
+    fi
     if [ -n "$TS_HOSTNAME" ]; then
         echo -e "  ${BOLD}Web Browser (requires Tailscale on client):${NC}"
         echo -e "    https://${TS_HOSTNAME}:7681"
