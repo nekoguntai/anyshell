@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#
+# ttyd-wrapper - Wrapper script to launch ttyd with credentials
+#
+# This script reads credentials from the config file and launches ttyd
+# with proper authentication and security settings.
+#
+
+set -e
+
+CONFIG_DIR="${HOME}/.config/claude-remote"
+CRED_FILE="${CONFIG_DIR}/web-credentials"
+SESSION_NAME="${CLAUDE_SESSION:-main}"
+
+# Check for credential file
+if [[ ! -f "$CRED_FILE" ]]; then
+    echo "ERROR: Credential file not found: $CRED_FILE" >&2
+    echo "Please run the installer first." >&2
+    exit 1
+fi
+
+# Read password
+WEB_PASSWORD=$(cat "$CRED_FILE")
+
+if [[ -z "$WEB_PASSWORD" ]]; then
+    echo "ERROR: Empty credential file" >&2
+    exit 1
+fi
+
+# Find ttyd
+TTYD_PATH=""
+for path in "${HOME}/.local/bin/ttyd" "/usr/local/bin/ttyd" "/opt/homebrew/bin/ttyd" "/usr/bin/ttyd"; do
+    if [[ -x "$path" ]]; then
+        TTYD_PATH="$path"
+        break
+    fi
+done
+
+if [[ -z "$TTYD_PATH" ]]; then
+    echo "ERROR: ttyd not found" >&2
+    exit 1
+fi
+
+# Find web-terminal script
+WEB_TERMINAL="${HOME}/.local/bin/web-terminal"
+if [[ ! -x "$WEB_TERMINAL" ]]; then
+    echo "ERROR: web-terminal script not found: $WEB_TERMINAL" >&2
+    exit 1
+fi
+
+# Launch ttyd with security settings
+exec "$TTYD_PATH" \
+    --writable \
+    --port 7681 \
+    --interface 127.0.0.1 \
+    --max-clients 2 \
+    --credential "claude:${WEB_PASSWORD}" \
+    "$WEB_TERMINAL"

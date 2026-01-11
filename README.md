@@ -8,7 +8,7 @@ Persistent terminal sessions for mobile productivity. Run long processes, discon
 - **Mosh + tmux**: Native terminal experience with roaming support
 - **Web Fallback**: Access via browser when native clients aren't available
 - **Cross-Platform**: Works from iOS, Android, Windows, Mac, Linux
-- **Secure**: Tailscale Funnel provides HTTPS without port forwarding
+- **Secure by Default**: Password authentication, localhost binding, connection limits
 
 ## Architecture
 
@@ -30,8 +30,10 @@ Persistent terminal sessions for mobile productivity. Run long processes, discon
     │  │   └─────────────────────────┘     │  │
     │  └───────────────────────────────────┘  │
     │         ▲                 ▲             │
-    │    mosh-server          ttyd            │
-    │    (UDP 60000+)    (via Tailscale)      │
+    │    mosh-server     ttyd (127.0.0.1)     │
+    │    (UDP 60000+)          │              │
+    │                    Tailscale Funnel     │
+    │                    (HTTPS + auth)       │
     └─────────────────────────────────────────┘
 ```
 
@@ -41,7 +43,7 @@ Persistent terminal sessions for mobile productivity. Run long processes, discon
 
 ```bash
 # Clone the repository
-git clone <repo-url> claude-remote
+git clone https://github.com/nekoguntai/claude-remote.git
 cd claude-remote
 
 # Run the installer
@@ -49,10 +51,13 @@ cd claude-remote
 ```
 
 The installer will:
-1. Install mosh, tmux, and ttyd
-2. Configure tmux with an optimized config
-3. Set up the web terminal service
-4. Configure Tailscale Funnel (if available)
+1. Install mosh, tmux, and ttyd (with checksum verification)
+2. Generate a secure random password for web access
+3. Configure tmux with security-optimized settings
+4. Set up the web terminal service (localhost only)
+5. Configure Tailscale Funnel (if available)
+
+**Important**: Save the web terminal password shown at the end of installation!
 
 ### Usage
 
@@ -72,12 +77,47 @@ ssh user@yourserver -t 'claude-session'
 ```
 
 **Connect via web browser:**
-Open your Tailscale Funnel URL (shown after installation)
+1. Open your Tailscale Funnel URL
+2. Login with username `claude` and the password from installation
+3. You'll attach to your tmux session
 
 **Check status:**
 ```bash
 claude-status
 ```
+
+**View your web password:**
+```bash
+cat ~/.config/claude-remote/web-credentials
+```
+
+## Security Model
+
+### What's Protected
+
+| Layer | Protection |
+|-------|------------|
+| **Web Terminal** | Password authentication required |
+| **Network** | ttyd binds to 127.0.0.1 only (not exposed on network) |
+| **Connections** | Max 2 concurrent web clients |
+| **Transport** | HTTPS via Tailscale Funnel |
+| **Idle Sessions** | Auto-lock after 15 minutes |
+| **Binary Downloads** | SHA256 checksum verification |
+| **Credentials** | Stored with 600 permissions |
+
+### What This Does NOT Protect Against
+
+- **SSH/Mosh access**: Uses your existing SSH authentication
+- **Tailscale Funnel URL discovery**: If someone finds your Funnel URL, they can attempt authentication
+- **Shared sessions**: Multiple web clients see the same tmux session
+- **Server compromise**: If your server is compromised, sessions are exposed
+
+### Security Recommendations
+
+1. **Use a strong SSH key** for mosh/SSH access
+2. **Don't share your Funnel URL** publicly
+3. **Use `Ctrl+a C-k`** to clear scrollback after entering sensitive data
+4. **Disable Funnel** when not needed: `tailscale funnel 7681 off`
 
 ## Client Apps by Platform
 
@@ -110,6 +150,8 @@ claude-session --list
 claude-session --kill work
 ```
 
+**Session names** must contain only alphanumeric characters, underscores, and hyphens.
+
 ## tmux Cheat Sheet
 
 The tmux prefix is `Ctrl+a` (press Ctrl+a, release, then press the command key).
@@ -124,6 +166,8 @@ The tmux prefix is `Ctrl+a` (press Ctrl+a, release, then press the command key).
 | `Ctrl+a \|` | Split pane vertically |
 | `Ctrl+a -` | Split pane horizontally |
 | `Ctrl+a h/j/k/l` | Navigate panes (vim keys) |
+| `Ctrl+a L` | Lock session manually |
+| `Ctrl+a C-k` | Clear scrollback (security) |
 | `Ctrl+a [` | Enter scroll/copy mode |
 | `Ctrl+a r` | Reload tmux config |
 
@@ -136,39 +180,39 @@ The tmux prefix is `Ctrl+a` (press Ctrl+a, release, then press the command key).
 
 ### tmux config
 The tmux configuration is installed to `~/.tmux.conf`. Key settings:
-- 50,000 line scrollback buffer
+- 10,000 line scrollback buffer (security-conscious default)
 - Mouse support enabled
 - Vim-style keybindings
+- 15-minute idle auto-lock
 - Status bar with session info
 
-### Web terminal
-The web terminal runs on localhost:7681 and is exposed via Tailscale Funnel.
+### Web terminal credentials
+Stored in `~/.config/claude-remote/web-credentials` with 600 permissions.
 
-**Linux:** Managed via systemd user service
+To regenerate credentials:
+```bash
+openssl rand -hex 16 > ~/.config/claude-remote/web-credentials
+systemctl --user restart claude-web.service  # Linux
+# or
+launchctl unload ~/Library/LaunchAgents/com.claude.web.plist && \
+launchctl load ~/Library/LaunchAgents/com.claude.web.plist  # macOS
+```
+
+### Service management
+
+**Linux (systemd):**
 ```bash
 systemctl --user status claude-web.service
 systemctl --user restart claude-web.service
+systemctl --user stop claude-web.service
+journalctl --user -u claude-web.service  # View logs
 ```
 
-**macOS:** Managed via launchd
+**macOS (launchd):**
 ```bash
 launchctl list | grep claude
 launchctl unload ~/Library/LaunchAgents/com.claude.web.plist
 launchctl load ~/Library/LaunchAgents/com.claude.web.plist
-```
-
-## Security
-
-- **Mosh/SSH**: Uses your existing SSH authentication
-- **Web terminal**: Protected by Tailscale authentication
-  - Only accessible to devices on your Tailnet
-  - HTTPS encryption via Tailscale
-- **Sessions**: User-scoped, no privilege escalation
-
-### Optional: Add basic auth to web terminal
-Edit the service to add credentials:
-```bash
-ttyd --credential user:password ...
 ```
 
 ## Troubleshooting
@@ -179,8 +223,13 @@ ttyd --credential user:password ...
 
 ### Web terminal not accessible
 1. Check service status: `claude-status`
-2. Verify Tailscale Funnel: `tailscale funnel status`
-3. Check ttyd is running: `pgrep ttyd`
+2. Verify ttyd is running: `pgrep -a ttyd`
+3. Check credentials exist: `cat ~/.config/claude-remote/web-credentials`
+4. Verify Tailscale Funnel: `tailscale funnel status`
+
+### "Authentication failed" on web terminal
+1. Ensure you're using username `claude`
+2. Check your password: `cat ~/.config/claude-remote/web-credentials`
 
 ### tmux session lost after reboot
 tmux sessions don't survive reboots by default. Options:

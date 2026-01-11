@@ -7,11 +7,8 @@ After=network.target
 Type=simple
 Environment=CLAUDE_SESSION=main
 
-# Run ttyd on localhost only (Tailscale Funnel handles external access)
-# --writable: Allow input (not read-only)
-# --port 7681: Default ttyd port
-# --base-path /: URL base path
-ExecStart=%h/.local/bin/ttyd --writable --port 7681 %h/.local/bin/web-terminal
+# Use wrapper script that handles credential loading
+ExecStart=%h/.local/bin/ttyd-wrapper
 
 # Restart on failure
 Restart=on-failure
@@ -19,9 +16,17 @@ RestartSec=5
 
 # Security hardening
 NoNewPrivileges=true
-ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
-ReadWritePaths=%h
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/claude-remote %h/.config/claude-remote
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
 
 [Install]
 WantedBy=default.target

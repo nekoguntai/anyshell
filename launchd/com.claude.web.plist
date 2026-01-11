@@ -7,11 +7,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/ttyd</string>
-        <string>--writable</string>
-        <string>--port</string>
-        <string>7681</string>
-        <string>HOMEDIR/.local/bin/web-terminal</string>
+        <string>HOMEDIR/.local/bin/ttyd-wrapper</string>
     </array>
 
     <key>EnvironmentVariables</key>
@@ -19,7 +15,7 @@
         <key>CLAUDE_SESSION</key>
         <string>main</string>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:HOMEDIR/.local/bin</string>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:HOMEDIR/.local/bin</string>
         <key>HOME</key>
         <string>HOMEDIR</string>
     </dict>
@@ -41,5 +37,8 @@
 
     <key>WorkingDirectory</key>
     <string>HOMEDIR</string>
+
+    <key>Umask</key>
+    <integer>77</integer>
 </dict>
 </plist>
