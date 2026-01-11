@@ -20,6 +20,7 @@ VERSION="1.0.0"
 DRY_RUN=false
 VERBOSE=false
 UPGRADE_MODE=false
+SKIP_TTYD=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -242,30 +243,120 @@ check_command() {
     command -v "$1" &> /dev/null
 }
 
-install_packages_macos() {
-    # Check for Homebrew
-    if ! check_command brew; then
-        print_error "Homebrew not found. Please install it first:"
-        echo "        /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
-        exit 1
+install_homebrew() {
+    print_info "Installing Homebrew..."
+    echo ""
+
+    if $DRY_RUN; then
+        print_dry_run '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+        return 0
     fi
 
-    print_info "Installing packages via Homebrew..."
-    if $DRY_RUN; then
-        print_dry_run "brew install mosh tmux ttyd"
+    # Run the Homebrew installer
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+    # Add Homebrew to PATH for this session (Apple Silicon vs Intel)
+    if [[ -f "/opt/homebrew/bin/brew" ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+        print_success "Homebrew installed (Apple Silicon)"
+    elif [[ -f "/usr/local/bin/brew" ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+        print_success "Homebrew installed (Intel)"
     else
-        # Install packages that aren't already installed
-        local packages_to_install=""
-        for pkg in mosh tmux ttyd; do
-            if ! brew list "$pkg" &>/dev/null; then
-                packages_to_install="$packages_to_install $pkg"
-            else
-                print_info "$pkg already installed"
-            fi
-        done
-        if [[ -n "$packages_to_install" ]]; then
-            brew install $packages_to_install
+        print_error "Homebrew installation may have failed"
+        return 1
+    fi
+
+    return 0
+}
+
+install_packages_macos() {
+    # Check what's already installed
+    local has_mosh=false
+    local has_tmux=false
+    local has_ttyd=false
+
+    check_command mosh && has_mosh=true
+    check_command tmux && has_tmux=true
+    check_command ttyd && has_ttyd=true
+
+    # Check if all packages are already installed
+    if $has_mosh && $has_tmux && $has_ttyd; then
+        print_success "All packages already installed"
+        return
+    fi
+
+    # Check for Homebrew
+    if ! check_command brew; then
+        print_warning "Homebrew is not installed"
+        echo ""
+        print_info "Homebrew is the recommended way to install packages on macOS."
+        print_info "It will install: mosh, tmux, and ttyd"
+        echo ""
+
+        if $DRY_RUN; then
+            print_dry_run "Would prompt to install Homebrew"
+            print_dry_run "brew install mosh tmux ttyd"
+            return
         fi
+
+        # Ask user if they want to install Homebrew
+        echo -e "${BOLD}Would you like to install Homebrew now? [Y/n]${NC} "
+        read -r response
+        response=${response:-Y}  # Default to Y if empty
+
+        if [[ "$response" =~ ^[Yy]$ ]] || [[ -z "$response" ]]; then
+            install_homebrew || {
+                print_error "Failed to install Homebrew"
+                echo ""
+                print_info "You can install it manually:"
+                echo '        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
+                echo ""
+                print_info "Then re-run this installer."
+                exit 1
+            }
+        else
+            # User declined Homebrew - check what's available
+            echo ""
+            if ! $has_mosh || ! $has_tmux; then
+                print_error "mosh and tmux are required but not installed."
+                echo ""
+                print_info "Alternative installation methods:"
+                echo ""
+                print_info "MacPorts:"
+                echo "        sudo port install mosh tmux"
+                echo ""
+                print_info "From source:"
+                echo "        See: https://github.com/mobile-shell/mosh"
+                echo "        See: https://github.com/tmux/tmux"
+                echo ""
+                exit 1
+            fi
+
+            # mosh and tmux exist, but no Homebrew for ttyd
+            if ! $has_ttyd; then
+                print_warning "ttyd not available - web terminal will be disabled"
+                print_info "To enable later, install Homebrew and run: brew install ttyd"
+                SKIP_TTYD=true
+            fi
+            return
+        fi
+    fi
+
+    # Homebrew is available - install packages
+    print_info "Installing packages via Homebrew..."
+
+    local packages_to_install=""
+    for pkg in mosh tmux ttyd; do
+        if ! brew list "$pkg" &>/dev/null && ! check_command "$pkg"; then
+            packages_to_install="$packages_to_install $pkg"
+        else
+            print_info "$pkg already installed"
+        fi
+    done
+
+    if [[ -n "$packages_to_install" ]]; then
+        brew install $packages_to_install
     fi
 }
 
@@ -619,14 +710,16 @@ print_completion() {
     echo -e "${BOLD}${GREEN}═══════════════════════════════════════════════════════════${NC}"
     echo ""
 
-    # Display credentials
-    echo -e "${BOLD}${RED}IMPORTANT - Web Terminal Credentials:${NC}"
-    echo -e "  Username: ${YELLOW}claude${NC}"
-    echo -e "  Password: ${YELLOW}${CLAUDE_WEB_PASSWORD}${NC}"
-    echo ""
-    echo -e "  ${RED}Save this password securely - you'll need it for web access!${NC}"
-    echo -e "  Credentials stored in: ${CONFIG_DIR}/web-credentials"
-    echo ""
+    # Display credentials (only if web terminal is available)
+    if ! $SKIP_TTYD; then
+        echo -e "${BOLD}${RED}IMPORTANT - Web Terminal Credentials:${NC}"
+        echo -e "  Username: ${YELLOW}claude${NC}"
+        echo -e "  Password: ${YELLOW}${CLAUDE_WEB_PASSWORD}${NC}"
+        echo ""
+        echo -e "  ${RED}Save this password securely - you'll need it for web access!${NC}"
+        echo -e "  Credentials stored in: ${CONFIG_DIR}/web-credentials"
+        echo ""
+    fi
 
     echo -e "${BOLD}Quick Start:${NC}"
     echo ""
@@ -640,7 +733,7 @@ print_completion() {
     echo -e "     ${YELLOW}ssh $(whoami)@$(hostname) -t 'claude-session'${NC}"
     echo ""
 
-    if check_command tailscale && tailscale status &>/dev/null; then
+    if ! $SKIP_TTYD && check_command tailscale && tailscale status &>/dev/null; then
         TS_HOSTNAME=$(tailscale status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\.$//')
         if [[ -n "$TS_HOSTNAME" ]]; then
             echo -e "  ${CYAN}4. Connect via web browser (requires Tailscale):${NC}"
@@ -653,14 +746,29 @@ print_completion() {
     echo -e "  ${CYAN}Check status:${NC}"
     echo -e "     ${YELLOW}claude-status${NC}"
     echo ""
-    echo -e "${BOLD}Security Notes:${NC}"
-    echo "  • Web terminal requires Tailscale + password authentication"
-    echo "  • Only accessible from devices on your Tailnet (not public)"
-    echo "  • ttyd binds to localhost only (127.0.0.1)"
-    echo "  • HTTPS encryption via Tailscale"
-    echo "  • Max 2 concurrent web connections allowed"
-    echo "  • Enable 2FA on your Tailscale account for extra security"
-    echo ""
+
+    if ! $SKIP_TTYD; then
+        echo -e "${BOLD}Security Notes:${NC}"
+        echo "  • Web terminal requires Tailscale + password authentication"
+        echo "  • Only accessible from devices on your Tailnet (not public)"
+        echo "  • ttyd binds to localhost only (127.0.0.1)"
+        echo "  • HTTPS encryption via Tailscale"
+        echo "  • Max 2 concurrent web connections allowed"
+        echo "  • Enable 2FA on your Tailscale account for extra security"
+        echo ""
+    else
+        echo -e "${BOLD}${YELLOW}Note: Web terminal not available${NC}"
+        echo "  To enable web terminal access later:"
+        if [[ "$OS" == "macos" ]]; then
+            echo "    1. Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            echo "    2. Install ttyd: brew install ttyd"
+        else
+            echo "    1. Install ttyd from GitHub releases"
+        fi
+        echo "    3. Re-run this installer"
+        echo ""
+    fi
+
     echo -e "${BOLD}Usage Tips:${NC}"
     echo "  • Start a long-running process and disconnect - it keeps running!"
     echo "  • Reconnect anytime to pick up where you left off"
@@ -703,10 +811,14 @@ main() {
 
     print_success "mosh installed"
     print_success "tmux installed"
-    print_success "ttyd installed"
+    if ! $SKIP_TTYD; then
+        print_success "ttyd installed"
+    fi
 
-    # Generate credentials before installing scripts/services
-    generate_credentials
+    # Generate credentials before installing scripts/services (only if ttyd is available)
+    if ! $SKIP_TTYD; then
+        generate_credentials
+    fi
 
     # Install scripts
     install_scripts
@@ -714,14 +826,21 @@ main() {
     # Install tmux config
     install_tmux_config
 
-    # Install service
-    case "$OS" in
-        macos)  install_service_macos ;;
-        debian|redhat) install_service_linux ;;
-    esac
+    # Install service (only if ttyd is available)
+    if ! $SKIP_TTYD; then
+        case "$OS" in
+            macos)  install_service_macos ;;
+            debian|redhat) install_service_linux ;;
+        esac
+    else
+        print_step "Skipping web terminal service (ttyd not available)"
+        print_info "Web terminal can be enabled later by installing ttyd"
+    fi
 
-    # Setup Tailscale
-    setup_tailscale
+    # Setup Tailscale for web terminal (only if ttyd is available)
+    if ! $SKIP_TTYD; then
+        setup_tailscale
+    fi
 
     # Save version file
     if ! $DRY_RUN; then
