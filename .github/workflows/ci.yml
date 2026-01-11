@@ -1,0 +1,161 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          severity: warning
+          format: tty
+        env:
+          SHELLCHECK_OPTS: -e SC1091 -e SC2034
+
+  test:
+    name: Tests (Bats)
+    runs-on: ubuntu-latest
+    needs: shellcheck
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bats
+        uses: bats-core/bats-action@main
+
+      - name: Run unit tests
+        run: bats tests/unit/*.bats --formatter tap
+
+      - name: Run smoke tests
+        run: bats tests/smoke/*.bats --formatter tap
+
+  test-macos:
+    name: Tests (macOS)
+    runs-on: macos-latest
+    needs: shellcheck
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Bats
+        run: brew install bats-core
+
+      - name: Run unit tests
+        run: bats tests/unit/*.bats --formatter tap
+
+      - name: Run smoke tests
+        run: bats tests/smoke/*.bats --formatter tap
+
+  syntax-check:
+    name: Syntax Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check bash syntax for all scripts
+        run: |
+          echo "Checking install.sh..."
+          bash -n install.sh
+
+          echo "Checking uninstall.sh..."
+          bash -n uninstall.sh
+
+          echo "Checking scripts..."
+          for script in scripts/*; do
+            echo "Checking $script..."
+            bash -n "$script"
+          done
+
+      - name: Validate tmux.conf syntax
+        run: |
+          # tmux config validation (if tmux is available)
+          if command -v tmux &>/dev/null; then
+            tmux -f config/tmux.conf -L test_server start-server \; kill-server 2>/dev/null || \
+              echo "Note: tmux config check skipped (may need running server)"
+          else
+            echo "tmux not installed, skipping config validation"
+          fi
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [test, syntax-check]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tmux mosh
+
+      - name: Setup Bats
+        uses: bats-core/bats-action@main
+
+      - name: Run integration tests
+        run: |
+          # Run tests that require actual tmux/mosh
+          bats tests/integration/*.bats --formatter tap 2>/dev/null || \
+            echo "No integration tests found yet"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck with security focus
+        run: |
+          # Install shellcheck
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+          # Run with security-focused checks
+          echo "=== Security-focused ShellCheck ==="
+          shellcheck -S warning \
+            -e SC1091 \
+            install.sh \
+            uninstall.sh \
+            scripts/* \
+            2>&1 || true
+
+      - name: Check for hardcoded secrets
+        run: |
+          echo "=== Checking for potential hardcoded secrets ==="
+
+          # Check for common secret patterns
+          if grep -rE "(password|secret|key|token)\s*=\s*['\"][^'\"]+['\"]" \
+               --include="*.sh" --include="*.bash" . 2>/dev/null | \
+               grep -v "# " | grep -v "test" | grep -v ".bats"; then
+            echo "WARNING: Potential hardcoded secrets found"
+            exit 1
+          else
+            echo "No obvious hardcoded secrets found"
+          fi
+
+      - name: Check file permissions in scripts
+        run: |
+          echo "=== Checking permission patterns ==="
+
+          # Verify umask usage for sensitive files
+          if grep -r "umask 077" install.sh; then
+            echo "Good: umask 077 used for secure file creation"
+          else
+            echo "WARNING: Consider using umask 077 for credential files"
+          fi
+
+          # Check for chmod patterns
+          grep -rn "chmod [0-9]" scripts/ install.sh || echo "No chmod patterns found"

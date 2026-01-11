@@ -1,0 +1,32 @@
+# ShellCheck configuration for claude-remote
+# https://github.com/koalaman/shellcheck/wiki/Configuration
+
+# Shell dialect
+shell=bash
+
+# Severity level: error, warning, info, style
+severity=warning
+
+# Excluded checks:
+# SC1091 - Not following sourced files (we have custom paths)
+# SC2034 - Unused variables (some are used in subshells/sourced scripts)
+disable=SC1091,SC2034
+
+# Enable all other checks including:
+# SC2086 - Quote to prevent globbing and word splitting
+# SC2046 - Quote command substitution
+# SC2006 - Use $(...) instead of backticks
+# SC2016 - Expressions don't expand in single quotes
+# SC2029 - Note that command expansion happens locally
+# SC2064 - Use single quotes for trap arguments
+# SC2068 - Double quote array expansions
+# SC2076 - Remove quotes from right-hand side of =~
+# SC2087 - Quote heredoc expression
+# SC2155 - Declare and assign separately to avoid masking return values
+
+# External sources (for future use)
+# source-path=./scripts
+# source-path=./lib
+
+# Formatting
+enable=require-variable-braces
