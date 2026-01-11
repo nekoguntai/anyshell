@@ -8,6 +8,20 @@
 
 set -e
 
+# Ensure Homebrew is in PATH on macOS (ttyd doesn't inherit shell PATH)
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    if [[ -f "/opt/homebrew/bin/brew" ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -f "/usr/local/bin/brew" ]]; then
+        eval "$(/usr/local/bin/brew shellenv)"
+    fi
+fi
+
+# Ensure ~/.local/bin is in PATH
+if [[ -d "${HOME}/.local/bin" ]]; then
+    export PATH="${HOME}/.local/bin:${PATH}"
+fi
+
 SESSION_NAME="${CLAUDE_SESSION:-main}"
 
 # Validate session name to prevent injection attacks
